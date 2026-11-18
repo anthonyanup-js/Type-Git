@@ -65,7 +65,7 @@ switch (command) {
         for (let dataPath of paths) {
             if (!fs.existsSync(path.join(process.cwd(), dataPath))) {
                 fileExists = false
-                console.log(path, "doesnt match any files or directories")
+                console.log(dataPath, "doesnt match any files or directories")
                 break
             }
         }
@@ -106,7 +106,6 @@ switch (command) {
             //check if the data path is file or folder
             //if its file add the file
             //if its folder recursively add the files
-            console.log(dataPath)
 
         }
 

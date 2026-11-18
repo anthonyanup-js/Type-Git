@@ -3,11 +3,12 @@ if (!process.argv[2]) {
     console.log("Invalid command")
     process.exit(1)
 }
-import fs from "fs"
+import fs, { readFileSync } from "fs"
 import path from "path"
+import { createHash } from "crypto"
+import { deflateSync } from "zlib"
 const command: string = process.argv[2]
 const args: string[] = process.argv.slice(3)
-
 switch (command) {
 
     case "init":
@@ -19,14 +20,14 @@ switch (command) {
             }
             fs.mkdirSync(path.join(rootFolderPath, "objects"), { recursive: true })
 
-            fs.mkdirSync(path.join(rootFolderPath, "refs/heads"),{recursive:true})
+            fs.mkdirSync(path.join(rootFolderPath, "refs/heads"), { recursive: true })
 
             fs.writeFileSync(path.join(rootFolderPath, "HEAD"), "ref:refs/heads/main\n")
 
             fs.writeFileSync(path.join(rootFolderPath, "index"), JSON.stringify({}))
 
 
-            console.log("TypeGit initialized successfully at",path.join(process.cwd(),".typegit"));
+            console.log("TypeGit initialized successfully at", path.join(process.cwd(), ".typegit"));
             break
 
 
@@ -36,10 +37,11 @@ switch (command) {
         }
 
     case "add":
+    
         const rootFolderPath: string = path.join(process.cwd(), ".typegit")
         if (!fs.existsSync(rootFolderPath)) {
-                console.log("TypeGit repository not initialized");
-                break;
+            console.log("TypeGit repository not initialized");
+            break;
         }
 
 
@@ -56,35 +58,48 @@ switch (command) {
         const paths: string[] = args
 
         if (!paths.length) {
-            console.log("Invalid Command")
+            console.log("Invalid Command2")
             process.exit(1)
         }
-        let fileExists=true
-        for(let dataPath of paths){
-            if(!fs.existsSync(path.join(process.cwd(),dataPath))){
-                fileExists=false
-                console.log(path,"doesnt match any files or directories")
+        let fileExists = true
+        for (let dataPath of paths) {
+            if (!fs.existsSync(path.join(process.cwd(), dataPath))) {
+                fileExists = false
+                console.log(path, "doesnt match any files or directories")
                 break
             }
         }
-        if(!fileExists){
+        if (!fileExists) {
             break
         }
-        const q:string[]=[]
+        const q: string[] = []
 
-        for(let dataPath of paths){
-            const stats=fs.statSync(path.join(process.cwd(),dataPath))
-            if(stats.isFile()){
+        for (let dataPath of paths) {
+            const stats = fs.statSync(path.join(process.cwd(), dataPath))
+            if (stats.isFile()) {
                 //read file content
-                const data=fs.readFileSync(path.join(process.cwd(),dataPath))
-                
+                const contentBuffer = readFileSync(path.join(process.cwd(), dataPath))
+                const headerBuffer = Buffer.from(`blob ${contentBuffer.length}\0`)
+
+                const hash = createHash("sha256")
+                    .update(headerBuffer)
+                    .update(contentBuffer)
+                    .digest("hex");
+
+                const [folderName,fileName]=[hash.slice(0,2),hash.slice(2)]
+                fs.mkdirSync(path.join(rootFolderPath, `objects/${folderName}`), { recursive: true })
+                const compressedData=deflateSync(Buffer.concat([headerBuffer,contentBuffer]))
+                fs.writeFileSync(path.join(rootFolderPath, `objects/${folderName}`,fileName),compressedData)
+                const index=JSON.parse(fs.readFileSync(path.join(rootFolderPath,"index")).toString())
+                index[dataPath]=hash
+                fs.writeFileSync(path.join(rootFolderPath,"index"),JSON.stringify(index))
                 //create blob object
                 //store the blob object in the objects folder
                 //update the index to include this file
             }
 
-            else if(stats.isDirectory()){
-                const entries=fs.readdirSync(path.join(process.cwd(),dataPath))
+            else if (stats.isDirectory()) {
+                const entries = fs.readdirSync(path.join(process.cwd(), dataPath))
                 paths.push(...entries)
 
             }

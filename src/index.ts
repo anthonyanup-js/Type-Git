@@ -6,9 +6,26 @@ if (!process.argv[2]) {
 import fs, { readFileSync } from "fs"
 import path from "path"
 import { createHash } from "crypto"
-import { deflateSync } from "zlib"
+import { deflateSync,inflateSync  } from "zlib"
 const command: string = process.argv[2]
 const args: string[] = process.argv.slice(3)
+
+// function decompress(compressedData:Buffer){
+//     const decompressedData:string=inflateSync(compressedData).toString("utf-8")
+
+//     return decompressedData
+// }
+
+// function getHeader(decompressedData:string){
+//     const [header,_]=decompressedData.split("/0")
+//     return header
+// }
+
+// function getData(decompressedData:string){
+//     const [_,data]=decompressedData.split("/0")
+//     return data
+// }
+
 switch (command) {
 
     case "init":
@@ -33,8 +50,7 @@ switch (command) {
 
         } catch (error) {
             console.log("error: ", error)
-            process.exit(1)
-        }
+            process.exit(1)}
 
     case "add":
     
@@ -73,8 +89,10 @@ switch (command) {
             break
         }
         const q: string[] = []
+        console.log(paths)
 
         for (let dataPath of paths) {
+            console.log("folder path",path.join(process.cwd(), dataPath))
             const stats = fs.statSync(path.join(process.cwd(), dataPath))
             if (stats.isFile()) {
                 //read file content
@@ -100,7 +118,7 @@ switch (command) {
 
             else if (stats.isDirectory()) {
                 const entries = fs.readdirSync(path.join(process.cwd(), dataPath))
-                paths.push(...entries)
+                paths.push(...entries.map((entry)=>`${dataPath}/${entry}`))
 
             }
             //check if the data path is file or folder

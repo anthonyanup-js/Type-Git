@@ -6,7 +6,7 @@ if (!process.argv[2]) {
 import fs, { readFileSync } from "fs"
 import path from "path"
 import { createHash } from "crypto"
-import { deflateSync,inflateSync  } from "zlib"
+import { deflateSync, inflateSync } from "zlib"
 const command: string = process.argv[2]
 const args: string[] = process.argv.slice(3)
 
@@ -50,10 +50,11 @@ switch (command) {
 
         } catch (error) {
             console.log("error: ", error)
-            process.exit(1)}
+            process.exit(1)
+        }
 
     case "add":
-    
+
         const rootFolderPath: string = path.join(process.cwd(), ".typegit")
         if (!fs.existsSync(rootFolderPath)) {
             console.log("TypeGit repository not initialized");
@@ -66,12 +67,56 @@ switch (command) {
             console.log("Invalid command")
             process.exit(1)
         }
+        const paths: string[] = []
 
         if (addCommandArg === ".") {
-            console.log("adding all files")
+            const entries = fs.readdirSync(process.cwd())
+            const set = new Set([".typegit", ".git", "node_modules"])
+            paths.push(...entries.filter((entry) => !set.has(entry)))
+            console.log(paths)
+            for (let dataPath of paths) {
+                // if(dataPath===".typegit" || dataPath===".git" || dataPath==="node_modules"){
+                //                 console.log("found folder",dataPath)
+
+                //     continue
+                // }
+                const stats = fs.statSync(path.join(process.cwd(), dataPath))
+                if (stats.isFile()) {
+                    //read file content
+                    const contentBuffer = readFileSync(path.join(process.cwd(), dataPath))
+                    const headerBuffer = Buffer.from(`blob ${contentBuffer.length}\0`)
+
+                    const hash = createHash("sha256")
+                        .update(headerBuffer)
+                        .update(contentBuffer)
+                        .digest("hex");
+
+                    const [folderName, fileName] = [hash.slice(0, 2), hash.slice(2)]
+                    fs.mkdirSync(path.join(rootFolderPath, `objects/${folderName}`), { recursive: true })
+                    const compressedData = deflateSync(Buffer.concat([headerBuffer, contentBuffer]))
+                    fs.writeFileSync(path.join(rootFolderPath, `objects/${folderName}`, fileName), compressedData)
+                    const index = JSON.parse(fs.readFileSync(path.join(rootFolderPath, "index")).toString())
+                    //check if the file is same or not and then i guess we should add it like this we can avoide writing into file again
+                    index[dataPath] = hash
+                    fs.writeFileSync(path.join(rootFolderPath, "index"), JSON.stringify(index))
+                    //create blob object
+                    //store the blob object in the objects folder
+                    //update the index to include this file
+                }
+
+                else if (stats.isDirectory()) {
+                    const entries = fs.readdirSync(path.join(process.cwd(), dataPath))
+                    paths.push(...entries.map((entry) => `${dataPath}/${entry}`))
+
+                }
+                //check if the data path is file or folder
+                //if its file add the file
+                //if its folder recursively add the files
+
+            }
             break
         }
-        const paths: string[] = args
+        paths.push(...args)
 
         if (!paths.length) {
             console.log("Invalid Command2")
@@ -89,10 +134,9 @@ switch (command) {
             break
         }
         const q: string[] = []
-        console.log(paths)
 
         for (let dataPath of paths) {
-            console.log("folder path",path.join(process.cwd(), dataPath))
+            console.log("folder path", path.join(process.cwd(), dataPath))
             const stats = fs.statSync(path.join(process.cwd(), dataPath))
             if (stats.isFile()) {
                 //read file content
@@ -104,13 +148,13 @@ switch (command) {
                     .update(contentBuffer)
                     .digest("hex");
 
-                const [folderName,fileName]=[hash.slice(0,2),hash.slice(2)]
+                const [folderName, fileName] = [hash.slice(0, 2), hash.slice(2)]
                 fs.mkdirSync(path.join(rootFolderPath, `objects/${folderName}`), { recursive: true })
-                const compressedData=deflateSync(Buffer.concat([headerBuffer,contentBuffer]))
-                fs.writeFileSync(path.join(rootFolderPath, `objects/${folderName}`,fileName),compressedData)
-                const index=JSON.parse(fs.readFileSync(path.join(rootFolderPath,"index")).toString())
-                index[dataPath]=hash
-                fs.writeFileSync(path.join(rootFolderPath,"index"),JSON.stringify(index))
+                const compressedData = deflateSync(Buffer.concat([headerBuffer, contentBuffer]))
+                fs.writeFileSync(path.join(rootFolderPath, `objects/${folderName}`, fileName), compressedData)
+                const index = JSON.parse(fs.readFileSync(path.join(rootFolderPath, "index")).toString())
+                index[dataPath] = hash
+                fs.writeFileSync(path.join(rootFolderPath, "index"), JSON.stringify(index))
                 //create blob object
                 //store the blob object in the objects folder
                 //update the index to include this file
@@ -118,7 +162,7 @@ switch (command) {
 
             else if (stats.isDirectory()) {
                 const entries = fs.readdirSync(path.join(process.cwd(), dataPath))
-                paths.push(...entries.map((entry)=>`${dataPath}/${entry}`))
+                paths.push(...entries.map((entry) => `${dataPath}/${entry}`))
 
             }
             //check if the data path is file or folder
@@ -129,6 +173,10 @@ switch (command) {
 
         break
     case "commit":
+        const dir = path.join(process.cwd(), ".typegit");
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+            console.log("no a typegit repository");
+        }
         const commitCommandArg: undefined | string = args[0]
         if (!commitCommandArg || commitCommandArg !== "-m") {
             console.log("Invalid Command")

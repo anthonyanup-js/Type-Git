@@ -188,6 +188,38 @@ switch (command) {
             console.log("Commit Message required")
             process.exit(1)
         }
+        //creating commeting
+        function createTree(){
+            const tree:any={}//refine:change the type after wards
+            const index:{[key:string]:string}=JSON.parse(fs.readFileSync(path.join(".typegit","index")).toString("utf-8"))
+
+            for(let key in index){
+                const value:string=index[key]!
+                const [rootFolder,...childFolders]=key.split("/")
+                if(typeof rootFolder!=="string"){
+                    return
+                }
+                if(!childFolders.length){
+                    tree[rootFolder]=value
+                }else{
+                    const currTree={}
+                    for(let i=0;i<childFolders.length;i++){
+                        if(i===childFolders.length-1){
+
+                        }
+
+
+                    }
+                }
+
+            }
+
+
+        }
+        function commit(){
+            //create tree object from the index(staging area) and return hash
+            const treeHash=createTree()
+        }
         console.log("changes commited with message", message)
         break
     case "branch":

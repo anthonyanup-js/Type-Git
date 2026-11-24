@@ -10,6 +10,7 @@ import { deflateSync, inflateSync } from "zlib"
 const command: string = process.argv[2]
 const args: string[] = process.argv.slice(3)
 
+
 // function decompress(compressedData:Buffer){
 //     const decompressedData:string=inflateSync(compressedData).toString("utf-8")
 
@@ -190,29 +191,40 @@ switch (command) {
         }
         //creating commeting
         function createTree(){
-            const tree:any={}//refine:change the type after wards
             const index:{[key:string]:string}=JSON.parse(fs.readFileSync(path.join(".typegit","index")).toString("utf-8"))
+            const result=Object.create(null)
 
-            for(let key in index){
-                const value:string=index[key]!
-                const [rootFolder,...childFolders]=key.split("/")
-                if(typeof rootFolder!=="string"){
-                    return
-                }
-                if(!childFolders.length){
-                    tree[rootFolder]=value
-                }else{
-                    const currTree={}
-                    for(let i=0;i<childFolders.length;i++){
-                        if(i===childFolders.length-1){
+            for(let [path,fileId] of Object.entries(index)){
+                const paths:string[]=path.split("/")
+                let current=result
 
-                        }
+                for(let i=0;i<paths.length;i++){
+                    const key:string|undefined=paths[i]
+                    if(!key) return
 
+                    if(i===paths.length-1){
+                        current[key]=fileId
+
+                    }else{
+                        current[key]=Object.create(null)
+                        current=current[key]
 
                     }
                 }
 
             }
+            return result
+
+
+            //src/routs/index.js:fileId --before
+            //{src:
+            //  {routs:
+            //      {index.js:fileId}     --after
+            //  }
+            //}
+            
+
+
 
 
         }

@@ -206,7 +206,7 @@ switch (command) {
                         current[key]=fileId
 
                     }else{
-                        current[key]=Object.create(null)
+                        current[key]=current[key] ? current[key] :Object.create(null)
                         current=current[key]
 
                     }
@@ -230,7 +230,7 @@ switch (command) {
         }
         function commit(){
             //create tree object from the index(staging area) and return hash
-            const treeHash=createTree()
+            const tree=createTree()
         }
         console.log("changes commited with message", message)
         break

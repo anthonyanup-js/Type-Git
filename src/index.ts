@@ -27,6 +27,104 @@ const args: string[] = process.argv.slice(3)
 //     return data
 // }
 
+function writeObject(
+    type: "blob" | "tree" | "commit",
+    content: Buffer
+): string {
+    const header = Buffer.from(
+        `${type} ${content.length}\0`
+    );
+
+    const data = Buffer.concat([header, content]);
+
+    const hash = createHash("sha256")
+        .update(data)
+        .digest("hex");
+
+    const folderPath = path.join(
+        process.cwd(),
+        ".typegit",
+        "objects",
+        hash.slice(0, 2)
+    );
+
+    const objectPath = path.join(
+        folderPath,
+        hash.slice(2)
+    );
+
+    if (!fs.existsSync(objectPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+        fs.writeFileSync(objectPath, deflateSync(data));
+    }
+
+    return hash;
+}
+function createTree() {
+    //this is intermidate implementation of the tree in real git each directory is represented as a saperate tree
+    const index: { [key: string]: string } = JSON.parse(fs.readFileSync(path.join(".typegit", "index")).toString("utf-8"))
+    const result = Object.create(null)
+
+    for (let [path, fileId] of Object.entries(index)) {
+
+        //the file id must be like this   file_permission_in_number fileName \0 fileId(hash)
+        const paths: string[] = path.split("/")
+        const entry = Buffer.concat([Buffer.from(`100644 ${paths[paths.length - 1]}\0`), Buffer.from(fileId, "hex")])
+
+        let current = result
+
+        for (let i = 0; i < paths.length; i++) {
+            const key: string | undefined = paths[i]
+            if (!key) return
+
+            if (i === paths.length - 1) {
+                current[key] = entry
+
+            } else {
+                current[key] = current[key] ? current[key] : Object.create(null)
+                current = current[key]
+
+            }
+        }
+
+    }
+    return result
+}
+
+
+type TreeNode = {
+    [name: string]: Buffer | TreeNode
+}
+
+function writeTree(tree: TreeNode): string {
+    const entries: Buffer[] = [];
+
+    for (const name of Object.keys(tree)) {
+        const value = tree[name];
+
+        if (Buffer.isBuffer(value)) {
+
+            // It is a file
+            entries.push(value);
+
+        } else {
+
+            // It is a folder
+            const treeHash = writeTree(value);
+
+            const entry = Buffer.concat([
+                Buffer.from(`40000 ${name}\0`),
+                Buffer.from(treeHash, "hex")
+            ]);
+
+            entries.push(entry);
+        }
+    }
+
+    const content = Buffer.concat(entries);
+
+    return writeObject("tree", content);
+}
 switch (command) {
 
     case "init":
@@ -53,7 +151,6 @@ switch (command) {
             console.log("error: ", error)
             process.exit(1)
         }
-
     case "add":
 
         const rootFolderPath: string = path.join(process.cwd(), ".typegit")
@@ -76,33 +173,16 @@ switch (command) {
             paths.push(...entries.filter((entry) => !set.has(entry)))
             console.log(paths)
             for (let dataPath of paths) {
-                // if(dataPath===".typegit" || dataPath===".git" || dataPath==="node_modules"){
-                //                 console.log("found folder",dataPath)
 
-                //     continue
-                // }
                 const stats = fs.statSync(path.join(process.cwd(), dataPath))
                 if (stats.isFile()) {
                     //read file content
                     const contentBuffer = readFileSync(path.join(process.cwd(), dataPath))
-                    const headerBuffer = Buffer.from(`blob ${contentBuffer.length}\0`)
-
-                    const hash = createHash("sha256")
-                        .update(headerBuffer)
-                        .update(contentBuffer)
-                        .digest("hex");
-
-                    const [folderName, fileName] = [hash.slice(0, 2), hash.slice(2)]
-                    fs.mkdirSync(path.join(rootFolderPath, `objects/${folderName}`), { recursive: true })
-                    const compressedData = deflateSync(Buffer.concat([headerBuffer, contentBuffer]))
-                    fs.writeFileSync(path.join(rootFolderPath, `objects/${folderName}`, fileName), compressedData)
+                    const hash = writeObject("blob", contentBuffer)
                     const index = JSON.parse(fs.readFileSync(path.join(rootFolderPath, "index")).toString())
-                    //check if the file is same or not and then i guess we should add it like this we can avoide writing into file again
                     index[dataPath] = hash
                     fs.writeFileSync(path.join(rootFolderPath, "index"), JSON.stringify(index))
-                    //create blob object
-                    //store the blob object in the objects folder
-                    //update the index to include this file
+
                 }
 
                 else if (stats.isDirectory()) {
@@ -110,9 +190,7 @@ switch (command) {
                     paths.push(...entries.map((entry) => `${dataPath}/${entry}`))
 
                 }
-                //check if the data path is file or folder
-                //if its file add the file
-                //if its folder recursively add the files
+
 
             }
             break
@@ -190,48 +268,27 @@ switch (command) {
             process.exit(1)
         }
         //creating commeting
-        function createTree(){
-            const index:{[key:string]:string}=JSON.parse(fs.readFileSync(path.join(".typegit","index")).toString("utf-8"))
-            const result=Object.create(null)
-
-            for(let [path,fileId] of Object.entries(index)){
-                const paths:string[]=path.split("/")
-                let current=result
-
-                for(let i=0;i<paths.length;i++){
-                    const key:string|undefined=paths[i]
-                    if(!key) return
-
-                    if(i===paths.length-1){
-                        current[key]=fileId
-
-                    }else{
-                        current[key]=current[key] ? current[key] :Object.create(null)
-                        current=current[key]
-
-                    }
-                }
-
-            }
-            return result
 
 
-            //src/routs/index.js:fileId --before
-            //{src:
-            //  {routs:
-            //      {index.js:fileId}     --after
-            //  }
-            //}
-            
+        //create tree object from the index(staging area) and return hash
+        const tree = createTree()
+        const rootTreeHash = writeTree(tree)
+        const branchPath = path.join(
+            ".typegit", "refs", "heads", "main"
+        );
+        const parentHash = fs.existsSync(branchPath)
+            ? fs.readFileSync(branchPath, "utf-8").trim()
+            : "";
+        const content = Buffer.from(
+            `tree ${rootTreeHash}\n` +
+            (parentHash ? `parent ${parentHash}\n` : "") +
+            `\n${message}\n`
+        );
+        const commitHash = writeObject("commit", content);
+        fs.writeFileSync(branchPath, commitHash);
 
 
 
-
-        }
-        function commit(){
-            //create tree object from the index(staging area) and return hash
-            const tree=createTree()
-        }
         console.log("changes commited with message", message)
         break
     case "branch":
